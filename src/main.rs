@@ -5,10 +5,16 @@ use std::{
     path::Path,
 };
 
-fn main() {
-    let app = App::new();
+use chrono::Datelike;
+use rss::Channel;
+
+#[tokio::main]
+async fn main() {
+    let mut app = App::new();
+    app.fetch_stories().await;
 }
 
+#[derive(Debug)]
 struct Story {
     author: String,
     url: String,
@@ -41,7 +47,44 @@ impl App {
             File::create(feeds_file_path).expect("Failed to create config file.");
         }
 
-        App { feeds: Vec::new() }
+        App {
+            feeds: Vec::new(),
+            stories: Vec::new(),
+        }
+    }
+
+    async fn fetch_stories(&mut self) {
+        let today = chrono::Local::now();
+
+        for feed in self.feeds.clone() {
+            if let Ok(feed_content) = reqwest::get(feed).await {
+                if let Ok(feed_bytes) = feed_content.bytes().await {
+                    if let Ok(channel) = Channel::read_from(&feed_bytes[..]) {
+                        for story in channel.items {
+                            if let Some(pub_date) = story.pub_date {
+                                let pub_date_c =
+                                    chrono::DateTime::parse_from_rfc2822(pub_date.clone().as_str())
+                                        .unwrap();
+
+                                if pub_date_c.year() != today.year()
+                                    || pub_date_c.month() != today.month()
+                                    || pub_date_c.day() != today.day()
+                                {
+                                    continue;
+                                }
+
+                                self.stories.push(Story {
+                                    author: channel.title.clone(),
+                                    url: story.link.unwrap_or(String::from("")),
+                                    html: story.description.unwrap_or(String::from("")),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        println!("{:?}", self.stories);
     }
 }
 
