@@ -1,3 +1,13 @@
+use frostmark::{MarkState, MarkWidget};
+use iced::{
+    Element, Font,
+    Length::Fill,
+    Task, Theme,
+    alignment::Horizontal,
+    color,
+    widget::{button, column, container, scrollable, text},
+};
+use rss::Channel;
 use std::{
     env::home_dir,
     fs::{self, File, create_dir_all},
@@ -5,16 +15,11 @@ use std::{
     path::Path,
 };
 
-use chrono::Datelike;
-use frostmark::{MarkState, MarkWidget};
-use iced::{
-    Element, Task,
-    widget::{button, column, container, scrollable, text},
-};
-use rss::Channel;
-
 fn main() -> iced::Result {
-    iced::application(App::new, App::update, App::view).run()
+    iced::application(App::new, App::update, App::view)
+        .title("TinyFeeds")
+        .theme(App::theme)
+        .run()
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +41,8 @@ struct App {
     feeds: Vec<String>,
     stories: Vec<Story>,
     mark_state: MarkState,
+    out_of_stories: bool,
+    loading: bool,
 }
 
 impl App {
@@ -50,6 +57,8 @@ impl App {
                         feeds: file_lines(feeds_file_path.as_path()),
                         stories: Vec::new(),
                         mark_state: MarkState::with_html(""),
+                        out_of_stories: false,
+                        loading: true,
                     },
                     Task::done(Message::FetchStories),
                 );
@@ -68,6 +77,8 @@ impl App {
                 feeds: Vec::new(),
                 stories: Vec::new(),
                 mark_state: MarkState::with_html(""),
+                out_of_stories: false,
+                loading: true,
             },
             Task::done(Message::FetchStories),
         )
@@ -76,6 +87,7 @@ impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::FetchStories => {
+                self.loading = true;
                 Task::perform(fetch_stories(self.feeds.clone()), Message::SetStories)
             }
             Message::SetStories(stories) => {
@@ -84,38 +96,64 @@ impl App {
                 Task::done(Message::SetStory)
             }
             Message::ReadStory => {
-                self.stories.pop();
+                self.stories.remove(0);
 
                 Task::done(Message::SetStory)
             }
             Message::SetStory => {
                 if self.stories.len() > 0 {
+                    self.out_of_stories = false;
                     self.mark_state = MarkState::with_html(self.stories[0].html.clone().as_str());
                 } else {
-                    self.mark_state = MarkState::with_markdown_only("# No More Stories Today!");
+                    self.out_of_stories = true;
                 }
+                self.loading = false;
                 Task::none()
             }
         }
     }
 
     fn view(&self) -> Element<'_, Message> {
-        if self.stories.len() == 0 {
-            container(text("Loading Feeds...").size(30))
-                .padding(10)
-                .center(800)
-                .style(container::rounded_box)
+        if self.loading || self.out_of_stories {
+            let message = if self.out_of_stories == true {
+                "That's it, check back later."
+            } else {
+                "Checking for stories..."
+            };
+            text(message)
+                .font(Font::MONOSPACE)
+                .size(20)
+                .width(Fill)
+                .height(Fill)
+                .center()
                 .into()
         } else {
             container(scrollable(column![
-                MarkWidget::new(&self.mark_state),
-                button("Next Story").on_press(Message::ReadStory),
+                container(MarkWidget::new(&self.mark_state),)
+                    .padding([20, 10])
+                    .height(Fill),
+                container(
+                    button("Next Story")
+                        .padding([10, 15])
+                        .on_press(Message::ReadStory)
+                )
+                .style(|_| container::Style {
+                    background: Some(color!(0x1e1e2e).into()),
+                    ..Default::default()
+                })
+                .padding([20, 0])
+                .width(Fill)
+                .align_x(Horizontal::Center),
             ]))
-            .padding(10)
-            .center(800)
+            .width(Fill)
+            .height(Fill)
             .style(container::rounded_box)
             .into()
         }
+    }
+
+    fn theme(&self) -> Option<Theme> {
+        Some(iced::Theme::CatppuccinLatte)
     }
 }
 
@@ -139,19 +177,23 @@ async fn fetch_stories(feeds: Vec<String>) -> Vec<Story> {
                         if let Some(pub_date) = story.pub_date {
                             let pub_date_c =
                                 chrono::DateTime::parse_from_rfc2822(pub_date.clone().as_str())
-                                    .unwrap();
+                                    .unwrap()
+                                    .with_timezone(&chrono::Local);
 
-                            if pub_date_c.year() != today.year()
-                                || pub_date_c.month() != today.month()
-                                || pub_date_c.day() != today.day()
-                            {
+                            if pub_date_c.date_naive() != today.date_naive() {
                                 continue;
                             }
+
+                            let content = if story.content.is_some() {
+                                story.content.unwrap()
+                            } else {
+                                story.description.unwrap_or(String::from(""))
+                            };
 
                             stories.push(Story {
                                 author: channel.title.clone(),
                                 url: story.link.unwrap_or(String::from("")),
-                                html: story.description.unwrap_or(String::from("")),
+                                html: content,
                             });
                         }
                     }
