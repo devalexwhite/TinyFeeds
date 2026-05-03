@@ -9,8 +9,7 @@ use chrono::Datelike;
 use frostmark::{MarkState, MarkWidget};
 use iced::{
     Element, Task,
-    application::timed::UpdateFn,
-    widget::{column, container, scrollable, text},
+    widget::{button, column, container, scrollable, text},
 };
 use rss::Channel;
 
@@ -29,6 +28,8 @@ struct Story {
 enum Message {
     FetchStories,
     SetStories(Vec<Story>),
+    ReadStory,
+    SetStory,
 }
 
 struct App {
@@ -79,7 +80,20 @@ impl App {
             }
             Message::SetStories(stories) => {
                 self.stories = stories.clone();
-                self.mark_state = MarkState::with_html(self.stories[0].html.clone().as_str());
+
+                Task::done(Message::SetStory)
+            }
+            Message::ReadStory => {
+                self.stories.pop();
+
+                Task::done(Message::SetStory)
+            }
+            Message::SetStory => {
+                if self.stories.len() > 0 {
+                    self.mark_state = MarkState::with_html(self.stories[0].html.clone().as_str());
+                } else {
+                    self.mark_state = MarkState::with_markdown_only("# No More Stories Today!");
+                }
                 Task::none()
             }
         }
@@ -95,7 +109,7 @@ impl App {
         } else {
             container(scrollable(column![
                 MarkWidget::new(&self.mark_state),
-                "A big meow",
+                button("Next Story").on_press(Message::ReadStory),
             ]))
             .padding(10)
             .center(800)
