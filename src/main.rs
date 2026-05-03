@@ -128,23 +128,27 @@ impl App {
                 .center()
                 .into()
         } else {
-            container(scrollable(column![
-                container(MarkWidget::new(&self.mark_state),)
-                    .padding([20, 10])
-                    .height(Fill),
-                container(
-                    button("Next Story")
-                        .padding([10, 15])
-                        .on_press(Message::ReadStory)
-                )
-                .style(|_| container::Style {
-                    background: Some(color!(0x1e1e2e).into()),
-                    ..Default::default()
-                })
-                .padding([20, 0])
-                .width(Fill)
-                .align_x(Horizontal::Center),
-            ]))
+            container(
+                scrollable(column![
+                    container(MarkWidget::new(&self.mark_state),)
+                        .padding([20, 10])
+                        .center_x(600)
+                        .height(Fill),
+                    container(
+                        button("Next Story")
+                            .padding([10, 15])
+                            .on_press(Message::ReadStory)
+                    )
+                    .style(|_| container::Style {
+                        background: Some(color!(0x1e1e2e).into()),
+                        ..Default::default()
+                    })
+                    .padding([20, 0])
+                    .width(Fill)
+                    .align_x(Horizontal::Center),
+                ])
+                .width(Fill),
+            )
             .width(Fill)
             .height(Fill)
             .style(container::rounded_box)
