@@ -129,29 +129,41 @@ impl App {
                 .into()
         } else {
             container(
-                scrollable(column![
-                    container(MarkWidget::new(&self.mark_state),)
-                        .padding([20, 10])
-                        .center_x(600)
-                        .height(Fill),
-                    container(
-                        button("Next Story")
-                            .padding([10, 15])
+                scrollable(
+                    column![
+                        container(
+                            container(MarkWidget::new(&self.mark_state).paragraph_spacing(20.0))
+                                .max_width(600),
+                        )
+                        .width(Fill)
+                        .align_x(Horizontal::Center)
+                        .padding([20, 10]),
+                        container(
+                            button(
+                                container(text("Next Story"))
+                                    .width(Fill)
+                                    .align_x(Horizontal::Center)
+                            )
+                            .padding([20, 15])
+                            .width(Fill)
                             .on_press(Message::ReadStory)
-                    )
-                    .style(|_| container::Style {
-                        background: Some(color!(0x1e1e2e).into()),
-                        ..Default::default()
-                    })
-                    .padding([20, 0])
-                    .width(Fill)
-                    .align_x(Horizontal::Center),
-                ])
+                        )
+                        // .style(|theme: &Theme| {
+                        //     let palette = theme.palette();
+                        //     container::Style {
+                        //         background: Some(palette.primary.into()),
+                        //         ..Default::default()
+                        //     }
+                        // })
+                        .width(Fill)
+                        .align_x(Horizontal::Center),
+                    ]
+                    .width(Fill),
+                )
                 .width(Fill),
             )
             .width(Fill)
             .height(Fill)
-            .style(container::rounded_box)
             .into()
         }
     }
@@ -208,3 +220,5 @@ async fn fetch_stories(feeds: Vec<String>) -> Vec<Story> {
 
     stories
 }
+
+async fn add_story_read(story: Story) {}

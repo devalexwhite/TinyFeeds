@@ -9,8 +9,17 @@ A tiny, highly opionated, minimal RSS feed reader.
 - Under 5MB binary size (goal)
 - Configuration driven by ~/.config/tinyfeeds/feeds.txt
 
+## FAQs
+
+### Can I import an OPML file?
+
+Sure! Use this command to convert your OPML file to the `feeds.txt` file TinyFeeds uses:
+
+`grep -oP 'xmlUrl="\K[^"]+' input.opml > ~/.config/tinyfeeds/feeds.txt`
+
 ## Todo
 
+- [ ] Progressively load feeds, holy crap it's slow with just 43 feeds
 - [ ] Save viewed feeds in a ~/.config/tinyfeeds/viewed.txt file
 - [ ] Reset viewed feeds on new day
 - [ ] Add button to open feeds.txt in $EDITOR for easy access
