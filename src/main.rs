@@ -6,9 +6,11 @@ use iced::{
     alignment::Horizontal,
     color,
     widget::{button, column, container, scrollable, text},
+    window::open,
 };
 use rss::Channel;
 use std::{
+    collections::btree_map::OccupiedEntry,
     env::home_dir,
     fs::{self, File, create_dir_all},
     io::{BufRead, BufReader},
@@ -35,6 +37,7 @@ enum Message {
     SetStories(Vec<Story>),
     ReadStory,
     SetStory,
+    OpenLink(String),
 }
 
 struct App {
@@ -90,6 +93,11 @@ impl App {
                 self.loading = true;
                 Task::perform(fetch_stories(self.feeds.clone()), Message::SetStories)
             }
+            Message::OpenLink(link) => {
+                webbrowser::open(&link);
+
+                Task::none()
+            }
             Message::SetStories(stories) => {
                 self.stories = stories.clone();
 
@@ -103,7 +111,8 @@ impl App {
             Message::SetStory => {
                 if self.stories.len() > 0 {
                     self.out_of_stories = false;
-                    self.mark_state = MarkState::with_html(self.stories[0].html.clone().as_str());
+                    self.mark_state =
+                        MarkState::with_html_and_markdown(self.stories[0].html.clone().as_str());
                 } else {
                     self.out_of_stories = true;
                 }
@@ -132,8 +141,12 @@ impl App {
                 scrollable(
                     column![
                         container(
-                            container(MarkWidget::new(&self.mark_state).paragraph_spacing(20.0))
-                                .max_width(600),
+                            container(
+                                MarkWidget::new(&self.mark_state)
+                                    .paragraph_spacing(20.0)
+                                    .on_clicking_link(Message::OpenLink)
+                            )
+                            .max_width(600),
                         )
                         .width(Fill)
                         .align_x(Horizontal::Center)
