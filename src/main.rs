@@ -8,6 +8,7 @@ use iced::{
     widget::{button, column, container, scrollable, text},
     window::open,
 };
+use reqwest::Client;
 use rss::Channel;
 use std::{
     collections::btree_map::OccupiedEntry,
@@ -15,6 +16,7 @@ use std::{
     fs::{self, File, create_dir_all},
     io::{BufRead, BufReader},
     path::Path,
+    time::Duration,
 };
 
 fn main() -> iced::Result {
@@ -198,8 +200,15 @@ async fn fetch_stories(feeds: Vec<String>) -> Vec<Story> {
     let today = chrono::Local::now();
     let mut stories = Vec::new();
 
+    let client = Client::new();
+
     for feed in feeds {
-        if let Ok(feed_content) = reqwest::get(feed).await {
+        if let Ok(feed_content) = client
+            .get(feed)
+            .timeout(Duration::from_secs(2))
+            .send()
+            .await
+        {
             if let Ok(feed_bytes) = feed_content.bytes().await {
                 if let Ok(channel) = Channel::read_from(&feed_bytes[..]) {
                     for story in channel.items {

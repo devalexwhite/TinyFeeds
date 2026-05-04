@@ -11,6 +11,10 @@ A tiny, highly opionated, minimal RSS feed reader.
 
 ## FAQs
 
+### How do I add feeds?
+
+After first starting the app, a new file will be created at `~/.config/tinyfeeds/feeds.txt`. Add the URLs to RSS feeds in this file (one per line).
+
 ### Can I import an OPML file?
 
 Sure! Use this command to convert your OPML file to the `feeds.txt` file TinyFeeds uses:
