@@ -2,9 +2,9 @@ use clap::Parser;
 use frostmark::{MarkState, MarkWidget};
 use iced::{
     Element, Font,
-    Length::{Fill, FillPortion},
+    Length::Fill,
     Task, Theme,
-    alignment::{Horizontal, Vertical},
+    alignment::Horizontal,
     widget::{Row, button, column, container, rule, scrollable, text},
 };
 use reqwest::Client;
@@ -109,7 +109,6 @@ impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::FetchStories => {
-                println!("{}", self.dev_mode);
                 if self.dev_mode == true {
                     self.stories.push(Story {
                         author: String::from("Alex White"),
