@@ -1,11 +1,13 @@
+use clap::Parser;
 use frostmark::{MarkState, MarkWidget};
 use iced::{
     Element, Font,
     Length::Fill,
     Task, Theme,
-    alignment::Horizontal,
+    alignment::{Horizontal, Vertical},
     color,
-    widget::{button, column, container, scrollable, text},
+    wgpu::wgc::command,
+    widget::{Row, button, column, container, row, rule, scrollable, text},
     window::open,
 };
 use reqwest::Client;
@@ -19,6 +21,13 @@ use std::{
     time::Duration,
 };
 
+#[derive(Parser)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    #[arg(long, short, action)]
+    dev_mode: bool,
+}
+
 fn main() -> iced::Result {
     iced::application(App::new, App::update, App::view)
         .title("TinyFeeds")
@@ -31,6 +40,7 @@ struct Story {
     author: String,
     url: String,
     html: String,
+    contact: String,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +50,8 @@ enum Message {
     ReadStory,
     SetStory,
     OpenLink(String),
+    OpenInBrowser,
+    EmailAuthor,
 }
 
 struct App {
@@ -48,10 +60,13 @@ struct App {
     mark_state: MarkState,
     out_of_stories: bool,
     loading: bool,
+    dev_mode: bool,
 }
 
 impl App {
     fn new() -> (Self, Task<Message>) {
+        let args = Args::parse();
+
         if let Some(home) = home_dir() {
             let mut feeds_file_path = home.clone();
             feeds_file_path.push(".config/tinyfeeds/feeds.txt");
@@ -64,6 +79,7 @@ impl App {
                         mark_state: MarkState::with_html(""),
                         out_of_stories: false,
                         loading: true,
+                        dev_mode: args.dev_mode,
                     },
                     Task::done(Message::FetchStories),
                 );
@@ -84,6 +100,7 @@ impl App {
                 mark_state: MarkState::with_html(""),
                 out_of_stories: false,
                 loading: true,
+                dev_mode: args.dev_mode,
             },
             Task::done(Message::FetchStories),
         )
@@ -92,11 +109,42 @@ impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::FetchStories => {
+                println!("{}", self.dev_mode);
+                if self.dev_mode == true {
+                    self.stories.push(Story {
+                        author: String::from("Alex White"),
+                        url: String::from("https://thatalexguy.dev"),
+                        html: String::from("<b>This is a sample story</b><h1>It tests the UI in dev mode</h1><h3>Enjoy being stuck in <i>sample land</i></h3>"),
+                        contact: String::from("hi@thatalexguy.dev"),
+                    });
+                    return Task::done(Message::SetStory);
+                }
                 self.loading = true;
+
                 Task::perform(fetch_stories(self.feeds.clone()), Message::SetStories)
             }
             Message::OpenLink(link) => {
                 webbrowser::open(&link);
+
+                Task::none()
+            }
+            Message::OpenInBrowser => {
+                if self.stories.len() > 0 {
+                    let url = self.stories[0].url.clone();
+                    if !url.is_empty() {
+                        webbrowser::open(&url);
+                    }
+                }
+
+                Task::none()
+            }
+            Message::EmailAuthor => {
+                if self.stories.len() > 0 {
+                    let email = self.stories[0].contact.clone();
+                    if !email.is_empty() {
+                        webbrowser::open(&format!("mailto:{}", email));
+                    }
+                }
 
                 Task::none()
             }
@@ -108,6 +156,8 @@ impl App {
             Message::ReadStory => {
                 self.stories.remove(0);
 
+                self.out_of_stories = self.stories.len() == 0;
+
                 Task::done(Message::SetStory)
             }
             Message::SetStory => {
@@ -115,8 +165,6 @@ impl App {
                     self.out_of_stories = false;
                     self.mark_state =
                         MarkState::with_html_and_markdown(self.stories[0].html.clone().as_str());
-                } else {
-                    self.out_of_stories = true;
                 }
                 self.loading = false;
                 Task::none()
@@ -139,44 +187,61 @@ impl App {
                 .center()
                 .into()
         } else {
-            container(
-                scrollable(
-                    column![
+            let mut actions_row = Row::new();
+            actions_row = actions_row.push(
+                button("Open in Browser")
+                    .style(button::secondary)
+                    .on_press(Message::OpenInBrowser),
+            );
+
+            if !self.stories[0].contact.is_empty() {
+                actions_row = actions_row.push(
+                    button("Email Author")
+                        .style(button::secondary)
+                        .on_press(Message::EmailAuthor),
+                );
+            }
+
+            actions_row = actions_row
+                .spacing(20)
+                .padding([10, 0])
+                .align_y(Vertical::Center);
+            container(column![
+                container(column![actions_row, rule::horizontal(2)])
+                    .width(Fill)
+                    .align_x(Horizontal::Center)
+                    .align_y(Vertical::Center)
+                    .padding(10),
+                column![
+                    container(scrollable(
                         container(
-                            container(
-                                MarkWidget::new(&self.mark_state)
-                                    .paragraph_spacing(20.0)
-                                    .on_clicking_link(Message::OpenLink)
-                            )
-                            .max_width(600),
+                            MarkWidget::new(&self.mark_state)
+                                .paragraph_spacing(20.0)
+                                .on_clicking_link(Message::OpenLink)
                         )
-                        .width(Fill)
-                        .align_x(Horizontal::Center)
-                        .padding([20, 10]),
-                        container(
-                            button(
-                                container(text("Next Story"))
-                                    .width(Fill)
-                                    .align_x(Horizontal::Center)
-                            )
-                            .padding([20, 15])
-                            .width(Fill)
-                            .on_press(Message::ReadStory)
+                        .max_width(600)
+                    ))
+                    .width(Fill)
+                    .align_x(Horizontal::Center)
+                    .padding([20, 10]),
+                    container(
+                        button(
+                            container(text("Next Story"))
+                                .width(Fill)
+                                .align_x(Horizontal::Center)
                         )
-                        // .style(|theme: &Theme| {
-                        //     let palette = theme.palette();
-                        //     container::Style {
-                        //         background: Some(palette.primary.into()),
-                        //         ..Default::default()
-                        //     }
-                        // })
+                        .padding([20, 15])
                         .width(Fill)
-                        .align_x(Horizontal::Center),
-                    ]
-                    .width(Fill),
-                )
+                        .on_press(Message::ReadStory)
+                    )
+                    .width(Fill)
+                    .height(Fill)
+                    .align_y(Vertical::Bottom)
+                    .align_x(Horizontal::Center)
+                ]
+                .height(Fill)
                 .width(Fill),
-            )
+            ])
             .width(Fill)
             .height(Fill)
             .into()
@@ -231,6 +296,7 @@ async fn fetch_stories(feeds: Vec<String>) -> Vec<Story> {
                             stories.push(Story {
                                 author: channel.title.clone(),
                                 url: story.link.unwrap_or(String::from("")),
+                                contact: story.author.unwrap_or(String::from("")),
                                 html: content,
                             });
                         }
