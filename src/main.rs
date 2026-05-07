@@ -1,4 +1,5 @@
 use clap::Parser;
+use feedparser_rs::parse;
 use frostmark::{MarkState, MarkWidget};
 use iced::{
     Element, Font,
@@ -8,7 +9,6 @@ use iced::{
     widget::{Row, button, column, container, rule, scrollable, text},
 };
 use reqwest::Client;
-use rss::Channel;
 use std::{
     env::home_dir,
     fs::{self, File, create_dir_all},
@@ -275,31 +275,44 @@ async fn fetch_stories(feeds: Vec<String>) -> Vec<Story> {
             .send()
             .await
             && let Ok(feed_bytes) = feed_content.bytes().await
-            && let Ok(channel) = Channel::read_from(&feed_bytes[..])
+            && let Ok(channel) = parse(&feed_bytes[..])
         {
-            for story in channel.items {
-                if let Some(pub_date) = story.pub_date {
-                    let pub_date_c =
-                        chrono::DateTime::parse_from_rfc2822(pub_date.clone().as_str())
-                            .unwrap()
-                            .with_timezone(&chrono::Local);
-
-                    if pub_date_c.date_naive() != today.date_naive() {
-                        continue;
+            for story in channel.entries {
+                if let Some(pub_date) = story.updated {
+                    if pub_date.date_naive() != today.date_naive() {
+                        break;
                     }
 
-                    let content = if story.content.is_some() {
-                        story.content.unwrap()
-                    } else {
-                        story.description.unwrap_or(String::from(""))
-                    };
+                    let mut content = story
+                        .content
+                        .iter()
+                        .map(|e| e.value.clone())
+                        .fold(String::from(""), |a, e| format!("{}{}", a, e));
+
+                    if content.is_empty() && story.summary.clone().is_some() {
+                        content = story.summary.unwrap();
+                    }
 
                     stories.push(Story {
-                        author: channel.title.clone(),
+                        author: if story.author.is_some() {
+                            story.author.unwrap().to_string()
+                        } else {
+                            String::from("")
+                        },
                         url: story.link.unwrap_or(String::from("")),
-                        contact: story
-                            .author
-                            .unwrap_or(channel.managing_editor.clone().unwrap_or(String::from(""))),
+                        contact: if story.author_detail.clone().is_some()
+                            && story.author_detail.clone().unwrap().email.is_some()
+                        {
+                            story
+                                .author_detail
+                                .clone()
+                                .unwrap()
+                                .email
+                                .unwrap()
+                                .into_inner()
+                        } else {
+                            String::from("")
+                        },
                         html: content,
                     });
                 }
