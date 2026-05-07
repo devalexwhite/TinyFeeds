@@ -297,7 +297,9 @@ async fn fetch_stories(feeds: Vec<String>) -> Vec<Story> {
                     stories.push(Story {
                         author: channel.title.clone(),
                         url: story.link.unwrap_or(String::from("")),
-                        contact: story.author.unwrap_or(String::from("")),
+                        contact: story
+                            .author
+                            .unwrap_or(channel.managing_editor.clone().unwrap_or(String::from(""))),
                         html: content,
                     });
                 }

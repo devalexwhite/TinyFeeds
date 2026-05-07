@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=TinyFeeds
+Exec=tinyfeeds
+Icon=tinyfeeds
+Type=Application
+Categories=Utility;
+X-AppImage-Version=0.0.1

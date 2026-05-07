@@ -18,3 +18,7 @@ strip = true
 lto = true
 panic = "abort"
 codegen-units = 1
+
+[package.metadata.appimage]
+icon = "icon.png"
+desktop_entry = "tinyfeeds.desktop"

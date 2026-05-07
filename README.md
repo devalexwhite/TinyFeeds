@@ -28,7 +28,7 @@ Sure! Use this command to convert your OPML file to the `feeds.txt` file TinyFee
 - [ ] Reset viewed feeds on new day
 - [ ] Add button to open feeds.txt in $EDITOR for easy access
 - [ ] Add author and URL information to post view
-- [ ] Add button to open post in browser
+- [x] Add button to open post in browser
 - [ ] Support for user configured timeout
 - [ ] Support for user configured theme
 - [ ] Better rendering of content
