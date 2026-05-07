@@ -1,3 +1,5 @@
+![Logo](icon.png)
+
 # TinyFeeds
 
 A tiny, highly opionated, minimal RSS feed reader.
@@ -8,6 +10,22 @@ A tiny, highly opionated, minimal RSS feed reader.
 - Distraction free interface that helps you focus on one post at a time
 - Under 5MB binary size (goal)
 - Configuration driven by ~/.config/tinyfeeds/feeds.txt
+
+## Building
+
+**Requirements**
+
+- Rust, cargo
+- `upx` (if using the `build.sh` script)
+- `appimagetool` if making an AppImage
+
+### Optimized Native Binary
+
+Run `./build.sh` in the base project directory. This will run a release build then compress it with `upx`. Resulting file will be `target/release/tinyfeeds`.
+
+### AppImage
+
+Run `cargo appimage` in the base project directory. Resulting file will be `target/appimage/tinyfeeds.AppImage`.
 
 ## FAQs
 
