@@ -11,8 +11,8 @@ use iced::{
 use reqwest::Client;
 use std::{
     env::home_dir,
-    fs::{self, File, create_dir_all},
-    io::{BufRead, BufReader},
+    fs::{self, File, OpenOptions, create_dir_all},
+    io::{BufRead, BufReader, Write},
     path::Path,
     time::Duration,
 };
@@ -118,11 +118,17 @@ impl App {
                             lksajdlsajd lkajsd lkjsa dlkjsa dkja lkdjasd </p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p>"),
                         contact: String::from("hi@thatalexguy.dev"),
                     });
+
                     return Task::done(Message::SetStory);
                 }
                 self.loading = true;
 
-                Task::perform(fetch_stories(self.feeds.clone()), Message::SetStories)
+                let tasks = self
+                    .feeds
+                    .iter()
+                    .map(|f| Task::perform(fetch_feed_stories(f.clone()), Message::SetStories));
+
+                Task::batch(tasks).chain(Task::done(Message::SetStory))
             }
             Message::OpenLink(link) => {
                 webbrowser::open(&link).unwrap_or_else(|_| println!("Failed to open browser"));
@@ -152,9 +158,12 @@ impl App {
                 Task::none()
             }
             Message::SetStories(stories) => {
-                self.stories = stories.clone();
+                println!("Setting {} stories", stories.len());
+                for story in stories {
+                    self.stories.push(story.clone());
+                }
 
-                Task::done(Message::SetStory)
+                Task::none()
             }
             Message::ReadStory => {
                 self.stories.remove(0);
@@ -168,8 +177,11 @@ impl App {
                     self.out_of_stories = false;
                     self.mark_state =
                         MarkState::with_html_and_markdown(self.stories[0].html.clone().as_str());
+                } else {
+                    self.out_of_stories = true;
                 }
                 self.loading = false;
+
                 Task::none()
             }
         }
@@ -262,6 +274,63 @@ fn file_lines(filename: impl AsRef<Path>) -> Vec<String> {
         .collect()
 }
 
+async fn fetch_feed_stories(feed: String) -> Vec<Story> {
+    let today = chrono::Local::now();
+    let client = Client::new();
+    let mut stories = Vec::new();
+
+    if let Ok(feed_content) = client
+        .get(feed)
+        .timeout(Duration::from_secs(2))
+        .send()
+        .await
+        && let Ok(feed_bytes) = feed_content.bytes().await
+        && let Ok(channel) = parse(&feed_bytes[..])
+    {
+        for story in channel.entries {
+            if let Some(pub_date) = story.updated {
+                if pub_date.date_naive() != today.date_naive() {
+                    break;
+                }
+
+                let mut content = story
+                    .content
+                    .iter()
+                    .map(|e| e.value.clone())
+                    .fold(String::from(""), |a, e| format!("{}{}", a, e));
+
+                if content.is_empty() && story.summary.clone().is_some() {
+                    content = story.summary.unwrap();
+                }
+
+                stories.push(Story {
+                    author: if story.author.is_some() {
+                        story.author.unwrap().to_string()
+                    } else {
+                        String::from("")
+                    },
+                    url: story.link.unwrap_or(String::from("")),
+                    contact: if story.author_detail.clone().is_some()
+                        && story.author_detail.clone().unwrap().email.is_some()
+                    {
+                        story
+                            .author_detail
+                            .clone()
+                            .unwrap()
+                            .email
+                            .unwrap()
+                            .into_inner()
+                    } else {
+                        String::from("")
+                    },
+                    html: content,
+                });
+            }
+        }
+    }
+    stories
+}
+
 async fn fetch_stories(feeds: Vec<String>) -> Vec<Story> {
     let today = chrono::Local::now();
     let mut stories = Vec::new();
@@ -323,4 +392,20 @@ async fn fetch_stories(feeds: Vec<String>) -> Vec<Story> {
     stories
 }
 
-async fn add_story_read(story: Story) {}
+fn add_story_read(story: Story) {
+    if let Some(home) = home_dir() {
+        let mut read_file_path = home.clone();
+        read_file_path.push(".config/tinyfeeds/read.txt");
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .create(true)
+            .open(read_file_path)
+            .unwrap();
+
+        if let Err(e) = writeln!(file, "{}", story.url) {
+            eprintln!("Couldn't write to file: {}", e);
+        }
+    }
+}
