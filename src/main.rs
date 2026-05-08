@@ -331,67 +331,6 @@ async fn fetch_feed_stories(feed: String) -> Vec<Story> {
     stories
 }
 
-async fn fetch_stories(feeds: Vec<String>) -> Vec<Story> {
-    let today = chrono::Local::now();
-    let mut stories = Vec::new();
-
-    let client = Client::new();
-
-    for feed in feeds {
-        if let Ok(feed_content) = client
-            .get(feed)
-            .timeout(Duration::from_secs(2))
-            .send()
-            .await
-            && let Ok(feed_bytes) = feed_content.bytes().await
-            && let Ok(channel) = parse(&feed_bytes[..])
-        {
-            for story in channel.entries {
-                if let Some(pub_date) = story.updated {
-                    if pub_date.date_naive() != today.date_naive() {
-                        break;
-                    }
-
-                    let mut content = story
-                        .content
-                        .iter()
-                        .map(|e| e.value.clone())
-                        .fold(String::from(""), |a, e| format!("{}{}", a, e));
-
-                    if content.is_empty() && story.summary.clone().is_some() {
-                        content = story.summary.unwrap();
-                    }
-
-                    stories.push(Story {
-                        author: if story.author.is_some() {
-                            story.author.unwrap().to_string()
-                        } else {
-                            String::from("")
-                        },
-                        url: story.link.unwrap_or(String::from("")),
-                        contact: if story.author_detail.clone().is_some()
-                            && story.author_detail.clone().unwrap().email.is_some()
-                        {
-                            story
-                                .author_detail
-                                .clone()
-                                .unwrap()
-                                .email
-                                .unwrap()
-                                .into_inner()
-                        } else {
-                            String::from("")
-                        },
-                        html: content,
-                    });
-                }
-            }
-        }
-    }
-
-    stories
-}
-
 fn add_story_read(story: Story) {
     if let Some(home) = home_dir() {
         let mut read_file_path = home.clone();
