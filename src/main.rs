@@ -5,8 +5,8 @@ use iced::{
     Element, Font,
     Length::Fill,
     Padding, Task, Theme,
-    alignment::Horizontal,
-    gradient,
+    alignment::{Horizontal, Vertical},
+    exit, gradient,
     widget::{Row, button, column, container, rule, scrollable, space, text},
 };
 use reqwest::Client;
@@ -55,6 +55,7 @@ enum Message {
     OpenInBrowser,
     EmailAuthor,
     StoriesLoaded,
+    CloseApp,
 }
 
 struct App {
@@ -183,6 +184,7 @@ impl App {
 
                 Task::done(Message::SetStory)
             }
+            Message::CloseApp => exit(),
             Message::SetStory => {
                 if self.stories.len() > 0 {
                     self.out_of_stories = false;
@@ -205,13 +207,19 @@ impl App {
             } else {
                 "Checking for stories..."
             };
-            text(message)
-                .font(Font::MONOSPACE)
-                .size(20)
-                .width(Fill)
-                .height(Fill)
-                .center()
-                .into()
+            container(column![
+                text(message).font(Font::MONOSPACE).size(20),
+                if self.out_of_stories {
+                    container(button("See Ya!").on_press(Message::CloseApp)).padding([20, 0])
+                } else {
+                    container(space())
+                }
+            ])
+            .width(Fill)
+            .align_x(Horizontal::Center)
+            .align_y(Vertical::Center)
+            .height(Fill)
+            .into()
         } else {
             let mut actions_row = Row::new();
             actions_row = actions_row.push(
@@ -298,9 +306,10 @@ impl App {
                                 gradient::Linear::new(1.57)
                                     .add_stop(read_progress as f32, palette.primary.strong.color)
                                     .add_stop(
-                                        read_progress as f32 + 0.01,
+                                        read_progress + 0.2 as f32,
                                         palette.primary.weak.color,
                                     )
+                                    .add_stop(1.0, palette.primary.weak.color)
                                     .into(),
                             );
 
