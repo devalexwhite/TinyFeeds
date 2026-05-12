@@ -6,6 +6,7 @@ use iced::{
     Length::Fill,
     Padding, Task, Theme,
     alignment::Horizontal,
+    gradient,
     widget::{Row, button, column, container, rule, scrollable, space, text},
 };
 use reqwest::Client;
@@ -53,6 +54,7 @@ enum Message {
     OpenLink(String),
     OpenInBrowser,
     EmailAuthor,
+    StoriesLoaded,
 }
 
 struct App {
@@ -62,6 +64,7 @@ struct App {
     out_of_stories: bool,
     loading: bool,
     dev_mode: bool,
+    org_story_count: usize,
 }
 
 impl App {
@@ -81,6 +84,7 @@ impl App {
                         out_of_stories: false,
                         loading: true,
                         dev_mode: args.dev_mode,
+                        org_story_count: 0,
                     },
                     Task::done(Message::FetchStories),
                 );
@@ -102,6 +106,7 @@ impl App {
                 out_of_stories: false,
                 loading: true,
                 dev_mode: args.dev_mode,
+                org_story_count: 0,
             },
             Task::done(Message::FetchStories),
         )
@@ -130,7 +135,7 @@ impl App {
                     .iter()
                     .map(|f| Task::perform(fetch_feed_stories(f.clone()), Message::SetStories));
 
-                Task::batch(tasks).chain(Task::done(Message::SetStory))
+                Task::batch(tasks).chain(Task::done(Message::StoriesLoaded))
             }
             Message::OpenLink(link) => {
                 webbrowser::open(&link).unwrap_or_else(|_| println!("Failed to open browser"));
@@ -170,6 +175,11 @@ impl App {
 
                 self.out_of_stories = self.stories.len() == 0;
                 add_story_read(story);
+
+                Task::done(Message::SetStory)
+            }
+            Message::StoriesLoaded => {
+                self.org_story_count = self.stories.len();
 
                 Task::done(Message::SetStory)
             }
@@ -218,6 +228,17 @@ impl App {
                 );
             }
 
+            let read_progress = 1.0
+                - (if self.stories.len() > 0 {
+                    self.stories.len() as f32
+                } else {
+                    1.0
+                } / if self.org_story_count > 0 {
+                    self.org_story_count as f32
+                } else {
+                    1.0
+                });
+
             let centered_actions_row = container(actions_row.spacing(20).padding([10, 0]))
                 .width(Fill)
                 .align_x(Horizontal::Center);
@@ -257,7 +278,7 @@ impl App {
                                     .paragraph_spacing(20.0)
                                     .on_clicking_link(Message::OpenLink)
                             ])
-                            .max_width(800)
+                            .max_width(600)
                         )
                         .width(Fill)
                         .align_x(Horizontal::Center)
@@ -271,6 +292,23 @@ impl App {
                                 .align_x(Horizontal::Center)
                         )
                         .padding([20, 15])
+                        .style(move |theme: &Theme, _| {
+                            let palette = theme.extended_palette();
+                            let progress_bg = iced::Background::Gradient(
+                                gradient::Linear::new(1.57)
+                                    .add_stop(read_progress as f32, palette.primary.strong.color)
+                                    .add_stop(
+                                        read_progress as f32 + 0.01,
+                                        palette.primary.weak.color,
+                                    )
+                                    .into(),
+                            );
+
+                            button::Style {
+                                background: Some(progress_bg.clone()),
+                                ..Default::default()
+                            }
+                        })
                         .width(Fill)
                         .on_press(Message::ReadStory)
                     )
