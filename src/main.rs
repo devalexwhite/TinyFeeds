@@ -4,9 +4,9 @@ use frostmark::{MarkState, MarkWidget};
 use iced::{
     Element, Font,
     Length::Fill,
-    Task, Theme,
+    Padding, Task, Theme,
     alignment::Horizontal,
-    widget::{Row, button, column, container, rule, scrollable, text},
+    widget::{Row, button, column, container, rule, scrollable, space, text},
 };
 use reqwest::Client;
 use std::{
@@ -37,10 +37,11 @@ fn main() -> iced::Result {
 
 #[derive(Debug, Clone)]
 struct Story {
-    author: String,
+    author: Option<String>,
+    title: Option<String>,
     url: String,
     html: String,
-    contact: String,
+    contact: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -111,12 +112,13 @@ impl App {
             Message::FetchStories => {
                 if self.dev_mode == true {
                     self.stories.push(Story {
-                        author: String::from("Alex White"),
+                        title: Some(String::from("Just a test article")),
+                        author: Some(String::from("Alex White")),
                         url: String::from("https://thatalexguy.dev"),
                         html: String::from("<b>This is a sample story</b><h1>It tests the UI in dev mode</h1><h3>Enjoy being stuck in <i>sample land</i></h3>
                             <p>ajskdkajdlkajd sajd ksajdlkaj dlkajsdkjsakdjaslkdja lkdjsalkd jaslkd jaklsjd kajsd lkjsa dlja d</p><p>kjsad lkjsadlsa jdalksd jlksajdak jdlkjsad lasjd
                             lksajdlsajd lkajsd lkjsa dlkjsa dkja lkdjasd </p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p>"),
-                        contact: String::from("hi@thatalexguy.dev"),
+                        contact: Some(String::from("hi@thatalexguy.dev")),
                     });
 
                     return Task::done(Message::SetStory);
@@ -148,8 +150,7 @@ impl App {
             }
             Message::EmailAuthor => {
                 if self.stories.len() > 0 {
-                    let email = self.stories[0].contact.clone();
-                    if !email.is_empty() {
+                    if let Some(email) = self.stories[0].contact.clone() {
                         webbrowser::open(&format!("mailto:{}", email))
                             .unwrap_or_else(|_| println!("Failed to open browser"));
                     }
@@ -158,7 +159,6 @@ impl App {
                 Task::none()
             }
             Message::SetStories(stories) => {
-                println!("Setting {} stories", stories.len());
                 for story in stories {
                     self.stories.push(story.clone());
                 }
@@ -166,9 +166,10 @@ impl App {
                 Task::none()
             }
             Message::ReadStory => {
-                self.stories.remove(0);
+                let story = self.stories.remove(0);
 
                 self.out_of_stories = self.stories.len() == 0;
+                add_story_read(story);
 
                 Task::done(Message::SetStory)
             }
@@ -209,7 +210,7 @@ impl App {
                     .on_press(Message::OpenInBrowser),
             );
 
-            if !self.stories[0].contact.is_empty() {
+            if !self.stories[0].contact.is_some() {
                 actions_row = actions_row.push(
                     button("Email Author")
                         .style(button_outline)
@@ -227,12 +228,36 @@ impl App {
                 column![
                     scrollable(
                         container(
-                            container(
+                            container(column![
+                                container(column![
+                                    if let Some(title) = self.stories[0].title.clone() {
+                                        container(text(title).size(40))
+                                    } else {
+                                        container(space())
+                                    },
+                                    if let Some(author) = self.stories[0].author.clone() {
+                                        container(text(format!("By {}", author)).size(16)).padding(
+                                            Padding {
+                                                top: 5.0,
+                                                left: 0.0,
+                                                right: 0.0,
+                                                bottom: 40.0,
+                                            },
+                                        )
+                                    } else {
+                                        container(space()).padding(Padding {
+                                            top: 5.0,
+                                            left: 0.0,
+                                            right: 0.0,
+                                            bottom: 40.0,
+                                        })
+                                    }
+                                ]),
                                 MarkWidget::new(&self.mark_state)
                                     .paragraph_spacing(20.0)
                                     .on_clicking_link(Message::OpenLink)
-                            )
-                            .max_width(600)
+                            ])
+                            .max_width(800)
                         )
                         .width(Fill)
                         .align_x(Horizontal::Center)
@@ -281,7 +306,7 @@ async fn fetch_feed_stories(feed: String) -> Vec<Story> {
 
     if let Ok(feed_content) = client
         .get(feed)
-        .timeout(Duration::from_secs(2))
+        .timeout(Duration::from_secs(10))
         .send()
         .await
         && let Ok(feed_bytes) = feed_content.bytes().await
@@ -305,23 +330,22 @@ async fn fetch_feed_stories(feed: String) -> Vec<Story> {
 
                 stories.push(Story {
                     author: if story.author.is_some() {
-                        story.author.unwrap().to_string()
+                        Some(story.author.unwrap().to_string())
                     } else {
-                        String::from("")
+                        None
+                    },
+                    title: if let Some(title) = story.title {
+                        Some(title)
+                    } else {
+                        None
                     },
                     url: story.link.unwrap_or(String::from("")),
-                    contact: if story.author_detail.clone().is_some()
-                        && story.author_detail.clone().unwrap().email.is_some()
+                    contact: if let Some(ad) = story.author_detail.clone()
+                        && let Some(email) = ad.email
                     {
-                        story
-                            .author_detail
-                            .clone()
-                            .unwrap()
-                            .email
-                            .unwrap()
-                            .into_inner()
+                        Some(email.to_string())
                     } else {
-                        String::from("")
+                        None
                     },
                     html: content,
                 });
