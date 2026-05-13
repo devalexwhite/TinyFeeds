@@ -1,6 +1,6 @@
 use clap::Parser;
 use feedparser_rs::parse;
-use frostmark::{MarkState, MarkWidget};
+use frostmark::{MarkState, MarkWidget, UpdateMsg};
 use iced::{
     Element, Font,
     Length::Fill,
@@ -9,6 +9,7 @@ use iced::{
     exit, gradient,
     widget::{Row, button, column, container, image, rule, scrollable, space, svg, text},
 };
+use readabilityrs::{Readability, ReadabilityOptions};
 use reqwest::Client;
 use std::{
     collections::{HashMap, HashSet},
@@ -59,6 +60,7 @@ enum Message {
     StoriesLoaded,
     CloseApp,
     ImageDownloaded(Result<Image, String>),
+    UpdateState(UpdateMsg),
 }
 
 struct App {
@@ -127,6 +129,10 @@ impl App {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::UpdateState(n) => {
+                self.mark_state.update(n);
+                Task::none()
+            }
             Message::FetchStories => {
                 if self.dev_mode == true {
                     self.stories.push(Story {
@@ -216,8 +222,30 @@ impl App {
             Message::SetStory => {
                 if self.stories.len() > 0 {
                     self.out_of_stories = false;
-                    self.mark_state =
-                        MarkState::with_html_and_markdown(self.stories[0].html.clone().as_str());
+
+                    let readability_options = ReadabilityOptions {
+                        output_markdown: true,
+                        ..Default::default()
+                    };
+
+                    if let Ok(rd) = Readability::new(
+                        self.stories[0].html.clone().as_str(),
+                        Some(self.stories[0].url.as_str()),
+                        Some(readability_options),
+                    ) && let Some(article) = rd.parse()
+                    {
+                        if let Some(md) = article.markdown_content {
+                            self.mark_state = MarkState::with_markdown_only(md.as_str());
+                        } else {
+                            self.mark_state = MarkState::with_html(
+                                article.content.unwrap_or(String::from("")).as_str(),
+                            );
+                        }
+                    } else {
+                        self.mark_state = MarkState::with_html_and_markdown(
+                            self.stories[0].html.clone().as_str(),
+                        );
+                    }
                 } else {
                     self.out_of_stories = true;
                 }
@@ -339,6 +367,7 @@ impl App {
                                     .on_drawing_image(|info| container(self.draw_image(info))
                                         .padding([20, 0])
                                         .into())
+                                    .on_updating_state(|n| Message::UpdateState(n))
                                     .on_clicking_link(Message::OpenLink)
                             ])
                             .max_width(600)
