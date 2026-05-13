@@ -1,10 +1,11 @@
-![Logo](icon.png)
+<img src="./icon.png" width="80" alt="Logo" />
 
 # TinyFeeds
 
 A tiny, highly opionated, minimal RSS feed reader.
 
-![Screenshot of TinyFeeds](./screenshot.png)
+<img src="./screenshot.png" width="600" alt="Screenshot of TinyFeeds" />
+
 
 ## Features
 
