@@ -7,10 +7,11 @@ use iced::{
     Padding, Task, Theme,
     alignment::{Horizontal, Vertical},
     exit, gradient,
-    widget::{Row, button, column, container, rule, scrollable, space, text},
+    widget::{Row, button, column, container, image, rule, scrollable, space, svg, text},
 };
 use reqwest::Client;
 use std::{
+    collections::{HashMap, HashSet},
     env::home_dir,
     fs::{self, File, OpenOptions, create_dir_all},
     io::{BufRead, BufReader, Write},
@@ -18,8 +19,9 @@ use std::{
     time::Duration,
 };
 
-use crate::ui::button_outline;
+use crate::{image_loader::Image, ui::button_outline};
 
+mod image_loader;
 mod ui;
 
 #[derive(Parser)]
@@ -56,6 +58,7 @@ enum Message {
     EmailAuthor,
     StoriesLoaded,
     CloseApp,
+    ImageDownloaded(Result<Image, String>),
 }
 
 struct App {
@@ -66,6 +69,9 @@ struct App {
     loading: bool,
     dev_mode: bool,
     org_story_count: usize,
+    images_normal: HashMap<String, image::Handle>,
+    images_svg: HashMap<String, svg::Handle>,
+    images_in_progress: HashSet<String>,
 }
 
 impl App {
@@ -86,6 +92,9 @@ impl App {
                         loading: true,
                         dev_mode: args.dev_mode,
                         org_story_count: 0,
+                        images_normal: HashMap::new(),
+                        images_svg: HashMap::new(),
+                        images_in_progress: HashSet::new(),
                     },
                     Task::done(Message::FetchStories),
                 );
@@ -108,6 +117,9 @@ impl App {
                 loading: true,
                 dev_mode: args.dev_mode,
                 org_story_count: 0,
+                images_normal: HashMap::new(),
+                images_svg: HashMap::new(),
+                images_in_progress: HashSet::new(),
             },
             Task::done(Message::FetchStories),
         )
@@ -164,6 +176,22 @@ impl App {
 
                 Task::none()
             }
+            Message::ImageDownloaded(res) => match res {
+                Ok(image) => {
+                    if image.is_svg {
+                        self.images_svg
+                            .insert(image.url, svg::Handle::from_memory(image.bytes));
+                    } else {
+                        self.images_normal
+                            .insert(image.url, image::Handle::from_bytes(image.bytes));
+                    }
+                    Task::none()
+                }
+                Err(err) => {
+                    eprintln!("Couldn't download image: {err}");
+                    Task::none()
+                }
+            },
             Message::SetStories(stories) => {
                 for story in stories {
                     self.stories.push(story.clone());
@@ -194,10 +222,37 @@ impl App {
                     self.out_of_stories = true;
                 }
                 self.loading = false;
-
-                Task::none()
+                self.download_images()
             }
         }
+    }
+
+    fn draw_image(&self, info: frostmark::ImageInfo) -> Element<'static, Message> {
+        if let Some(image) = self.images_normal.get(info.url).cloned() {
+            let mut img = iced::widget::image(image);
+            if let Some(w) = info.width {
+                img = img.width(w);
+            }
+            img.into()
+        } else if let Some(image) = self.images_svg.get(info.url).cloned() {
+            let mut img = iced::widget::svg(image);
+            if let Some(w) = info.width {
+                img = img.width(w);
+            }
+            img.into()
+        } else {
+            "...".into()
+        }
+    }
+
+    fn download_images(&mut self) -> Task<Message> {
+        Task::batch(self.mark_state.find_image_links().into_iter().map(|url| {
+            if self.images_in_progress.insert(url.clone()) {
+                Task::perform(image_loader::download_image(url), Message::ImageDownloaded)
+            } else {
+                Task::none()
+            }
+        }))
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -237,15 +292,12 @@ impl App {
             }
 
             let read_progress = 1.0
-                - (if self.stories.len() > 0 {
-                    self.stories.len() as f32
-                } else {
-                    1.0
-                } / if self.org_story_count > 0 {
-                    self.org_story_count as f32
-                } else {
-                    1.0
-                });
+                - self.stories.len() as f32
+                    / if self.org_story_count > 0 {
+                        self.org_story_count as f32
+                    } else {
+                        1.0
+                    };
 
             let centered_actions_row = container(actions_row.spacing(20).padding([10, 0]))
                 .width(Fill)
@@ -284,6 +336,9 @@ impl App {
                                 ]),
                                 MarkWidget::new(&self.mark_state)
                                     .paragraph_spacing(20.0)
+                                    .on_drawing_image(|info| container(self.draw_image(info))
+                                        .padding([20, 0])
+                                        .into())
                                     .on_clicking_link(Message::OpenLink)
                             ])
                             .max_width(600)
@@ -293,13 +348,12 @@ impl App {
                         .padding([20, 10])
                     )
                     .height(Fill),
-                    container(
+                    container(column![
                         button(
                             container(text("Next Story"))
                                 .width(Fill)
                                 .align_x(Horizontal::Center)
                         )
-                        .padding([20, 15])
                         .style(move |theme: &Theme, _| {
                             let palette = theme.extended_palette();
                             let progress_bg = iced::Background::Gradient(
@@ -307,9 +361,9 @@ impl App {
                                     .add_stop(read_progress as f32, palette.primary.strong.color)
                                     .add_stop(
                                         read_progress + 0.2 as f32,
-                                        palette.primary.weak.color,
+                                        palette.secondary.weak.color,
                                     )
-                                    .add_stop(1.0, palette.primary.weak.color)
+                                    .add_stop(1.0, palette.secondary.weak.color)
                                     .into(),
                             );
 
@@ -318,10 +372,12 @@ impl App {
                                 ..Default::default()
                             }
                         })
+                        .padding([20, 15])
                         .width(Fill)
                         .on_press(Message::ReadStory)
-                    )
+                    ])
                     .width(Fill)
+                    .padding(20)
                     .align_x(Horizontal::Center)
                 ]
                 .height(Fill)
