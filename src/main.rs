@@ -311,7 +311,7 @@ impl App {
                     .on_press(Message::OpenInBrowser),
             );
 
-            if !self.stories[0].contact.is_some() {
+            if self.stories[0].contact.is_some() {
                 actions_row = actions_row.push(
                     button("Email Author")
                         .style(button_outline)
