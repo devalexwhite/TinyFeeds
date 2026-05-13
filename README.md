@@ -41,8 +41,8 @@ Sure! Use this command to convert your OPML file to the `feeds.txt` file TinyFee
 
 ## Todo
 
-- [ ] Progressively load feeds, holy crap it's slow with just 43 feeds
-- [ ] Save viewed feeds in a ~/.config/tinyfeeds/viewed.txt file
+- [x] Progressively load feeds, holy crap it's slow with just 43 feeds
+- [x] Save viewed feeds in a ~/.config/tinyfeeds/viewed.txt file
 - [ ] Reset viewed feeds on new day
 - [ ] Add button to open feeds.txt in $EDITOR for easy access
 - [ ] Add author and URL information to post view
@@ -51,6 +51,6 @@ Sure! Use this command to convert your OPML file to the `feeds.txt` file TinyFee
 - [ ] Support for user configured theme
 - [ ] Better rendering of content
   - [ ] Custom styling
-  - [ ] View images
+  - [x] View images
   - [ ] Change themes
-  - [ ] Working hyperlinks
+  - [x] Working hyperlinks
