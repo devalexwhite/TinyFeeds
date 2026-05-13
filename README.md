@@ -4,6 +4,8 @@
 
 A tiny, highly opionated, minimal RSS feed reader.
 
+![Screenshot of TinyFeeds](./screenshot.png)
+
 ## Features
 
 - View unread posts from today
