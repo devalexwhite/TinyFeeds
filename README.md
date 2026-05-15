@@ -44,6 +44,8 @@ Sure! Use this command to convert your OPML file to the `feeds.txt` file TinyFee
 
 ## Todo
 
+- [ ] Ability to export an article as a markdown document
+- [ ] If a story has no content, show a message "The author would like you to view this on their website" with a button
 - [x] Progressively load feeds, holy crap it's slow with just 43 feeds
 - [x] Save viewed feeds in a ~/.config/tinyfeeds/viewed.txt file
 - [ ] Reset viewed feeds on new day

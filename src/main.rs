@@ -139,9 +139,14 @@ impl App {
                         title: Some(String::from("Just a test article")),
                         author: Some(String::from("Alex White")),
                         url: String::from("https://thatalexguy.dev"),
-                        html: String::from("<b>This is a sample story</b><h1>It tests the UI in dev mode</h1><h3>Enjoy being stuck in <i>sample land</i></h3>
+                        html: String::from(r"
+                            <b>This is a sample story</b><h1>It tests the UI in dev mode</h1><h3>Enjoy being stuck in <i>sample land</i></h3>
                             <p>ajskdkajdlkajd sajd ksajdlkaj dlkajsdkjsakdjaslkdja lkdjsalkd jaslkd jaklsjd kajsd lkjsa dlja d</p><p>kjsad lkjsadlsa jdalksd jlksajdak jdlkjsad lasjd
-                            lksajdlsajd lkajsd lkjsa dlkjsa dkja lkdjasd </p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p>"),
+                            lksajdlsajd lkajsd lkjsa dlkjsa dkja lkdjasd </p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p>
+                            <p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p>
+                            <35;281;57M<p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p>
+                            <p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p>
+                            "),
                         contact: Some(String::from("hi@thatalexguy.dev")),
                     });
 
@@ -158,7 +163,6 @@ impl App {
             }
             Message::OpenLink(link) => {
                 webbrowser::open(&link).unwrap_or_else(|_| println!("Failed to open browser"));
-
                 Task::none()
             }
             Message::OpenInBrowser => {
@@ -293,7 +297,7 @@ impl App {
             container(column![
                 text(message).font(Font::MONOSPACE).size(20),
                 if self.out_of_stories {
-                    container(button("See Ya!").on_press(Message::CloseApp)).padding([20, 0])
+                    container(button("See ya!").on_press(Message::CloseApp)).padding([20, 0])
                 } else {
                     container(space())
                 }
@@ -307,14 +311,14 @@ impl App {
             let mut actions_row = Row::new();
             actions_row = actions_row.push(
                 button("Open in Browser")
-                    .style(button_outline)
+                    .style(button::secondary)
                     .on_press(Message::OpenInBrowser),
             );
 
             if self.stories[0].contact.is_some() {
                 actions_row = actions_row.push(
                     button("Email Author")
-                        .style(button_outline)
+                        .style(button::secondary)
                         .on_press(Message::EmailAuthor),
                 );
             }
@@ -329,52 +333,49 @@ impl App {
 
             let centered_actions_row = container(actions_row.spacing(20).padding([10, 0]))
                 .width(Fill)
-                .align_x(Horizontal::Center);
+                .align_x(Horizontal::Right);
             container(column![
                 container(column![centered_actions_row, rule::horizontal(2)])
                     .width(Fill)
                     .padding(10),
                 column![
                     scrollable(
-                        container(
+                        container(container(column![
                             container(column![
-                                container(column![
-                                    if let Some(title) = self.stories[0].title.clone() {
-                                        container(text(title).size(40))
-                                    } else {
-                                        container(space())
-                                    },
-                                    if let Some(author) = self.stories[0].author.clone() {
-                                        container(text(format!("By {}", author)).size(16)).padding(
-                                            Padding {
-                                                top: 5.0,
-                                                left: 0.0,
-                                                right: 0.0,
-                                                bottom: 40.0,
-                                            },
-                                        )
-                                    } else {
-                                        container(space()).padding(Padding {
+                                if let Some(title) = self.stories[0].title.clone() {
+                                    container(text(title).size(40))
+                                } else {
+                                    container(space())
+                                },
+                                if let Some(author) = self.stories[0].author.clone() {
+                                    container(text(format!("By {}", author)).size(16)).padding(
+                                        Padding {
                                             top: 5.0,
                                             left: 0.0,
                                             right: 0.0,
                                             bottom: 40.0,
-                                        })
-                                    }
-                                ]),
-                                MarkWidget::new(&self.mark_state)
-                                    .paragraph_spacing(20.0)
-                                    .on_drawing_image(|info| container(self.draw_image(info))
-                                        .padding([20, 0])
-                                        .into())
-                                    .on_updating_state(|n| Message::UpdateState(n))
-                                    .on_clicking_link(Message::OpenLink)
-                            ])
-                            .max_width(600)
-                        )
+                                        },
+                                    )
+                                } else {
+                                    container(space()).padding(Padding {
+                                        top: 5.0,
+                                        left: 0.0,
+                                        right: 0.0,
+                                        bottom: 40.0,
+                                    })
+                                }
+                            ]),
+                            MarkWidget::new(&self.mark_state)
+                                .paragraph_spacing(20.0)
+                                .on_drawing_image(|info| container(self.draw_image(info))
+                                    .padding([20, 0])
+                                    .into())
+                                .on_updating_state(|n| Message::UpdateState(n))
+                                .on_clicking_link(Message::OpenLink)
+                        ]))
                         .width(Fill)
                         .align_x(Horizontal::Center)
-                        .padding([20, 10])
+                        .padding([20, 15])
                     )
                     .height(Fill),
                     container(column![
@@ -419,7 +420,7 @@ impl App {
     }
 
     fn theme(&self) -> Option<Theme> {
-        Some(iced::Theme::CatppuccinLatte)
+        Some(iced::Theme::TokyoNight)
     }
 }
 
@@ -502,5 +503,19 @@ fn add_story_read(story: Story) {
         if let Err(e) = writeln!(file, "{}", story.url) {
             eprintln!("Couldn't write to file: {}", e);
         }
+    }
+}
+
+fn get_read_stories() {
+    if let Some(home) = home_dir() {
+        let mut read_file_path = home.clone();
+        read_file_path.push(".config/tinyfeeds/read.txt");
+
+        if let Ok(file) = OpenOptions::new()
+            .write(false)
+            .append(false)
+            .create(false)
+            .open(read_file_path)
+        {}
     }
 }
