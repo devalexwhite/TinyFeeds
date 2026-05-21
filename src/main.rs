@@ -16,11 +16,11 @@ use std::{
     env::home_dir,
     fs::{self, File, OpenOptions, create_dir_all},
     io::{BufRead, BufReader, Write},
-    path::Path,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
-use crate::{image_loader::Image, ui::button_outline};
+use crate::image_loader::Image;
 
 mod image_loader;
 mod ui;
@@ -66,6 +66,7 @@ enum Message {
 struct App {
     feeds: Vec<String>,
     stories: Vec<Story>,
+    read_stories: Vec<String>,
     mark_state: MarkState,
     out_of_stories: bool,
     loading: bool,
@@ -80,39 +81,28 @@ impl App {
     fn new() -> (Self, Task<Message>) {
         let args = Args::parse();
 
-        if let Some(home) = home_dir() {
-            let mut feeds_file_path = home.clone();
-            feeds_file_path.push(".config/tinyfeeds/feeds.txt");
+        let read_stories = if let Some(config) = get_config_file_path("read.txt") {
+            file_lines(config.as_path())
+        } else {
+            Vec::new()
+        };
 
-            if let Ok(true) = fs::exists(feeds_file_path.as_path()) {
-                return (
-                    App {
-                        feeds: file_lines(feeds_file_path.as_path()),
-                        stories: Vec::new(),
-                        mark_state: MarkState::with_html(""),
-                        out_of_stories: false,
-                        loading: true,
-                        dev_mode: args.dev_mode,
-                        org_story_count: 0,
-                        images_normal: HashMap::new(),
-                        images_svg: HashMap::new(),
-                        images_in_progress: HashSet::new(),
-                    },
-                    Task::done(Message::FetchStories),
-                );
-            }
-
-            let mut feeds_base_path = home.clone();
-
+        let feeds = if let Some(config) = get_config_file_path("feeds.txt") {
+            file_lines(config.as_path())
+        } else {
+            let mut feeds_base_path = home_dir().unwrap_or_default();
             feeds_base_path.push(".config/tinyfeeds/");
-
-            create_dir_all(feeds_base_path).expect("Failed to create config directory.");
+            create_dir_all(feeds_base_path.clone()).expect("Failed to create config directory.");
+            let mut feeds_file_path = feeds_base_path;
+            feeds_file_path.push("feeds.txt");
             File::create(feeds_file_path).expect("Failed to create config file.");
-        }
+            Vec::new()
+        };
 
         (
             App {
-                feeds: Vec::new(),
+                feeds: feeds,
+                read_stories: read_stories,
                 stories: Vec::new(),
                 mark_state: MarkState::with_html(""),
                 out_of_stories: false,
@@ -134,7 +124,7 @@ impl App {
                 Task::none()
             }
             Message::FetchStories => {
-                if self.dev_mode == true {
+                if self.dev_mode {
                     self.stories.push(Story {
                         title: Some(String::from("Just a test article")),
                         author: Some(String::from("Alex White")),
@@ -154,10 +144,12 @@ impl App {
                 }
                 self.loading = true;
 
-                let tasks = self
-                    .feeds
-                    .iter()
-                    .map(|f| Task::perform(fetch_feed_stories(f.clone()), Message::SetStories));
+                let tasks = self.feeds.iter().map(|f| {
+                    Task::perform(
+                        fetch_feed_stories(f.clone(), self.read_stories.clone()),
+                        Message::SetStories,
+                    )
+                });
 
                 Task::batch(tasks).chain(Task::done(Message::StoriesLoaded))
             }
@@ -203,16 +195,14 @@ impl App {
                 }
             },
             Message::SetStories(stories) => {
-                for story in stories {
-                    self.stories.push(story.clone());
-                }
+                self.stories.extend(stories);
 
                 Task::none()
             }
             Message::ReadStory => {
                 let story = self.stories.remove(0);
 
-                self.out_of_stories = self.stories.len() == 0;
+                self.out_of_stories = self.stories.is_empty();
                 add_story_read(story);
 
                 Task::done(Message::SetStory)
@@ -289,7 +279,7 @@ impl App {
 
     fn view(&self) -> Element<'_, Message> {
         if self.loading || self.out_of_stories {
-            let message = if self.out_of_stories == true {
+            let message = if self.out_of_stories {
                 "That's it, check back later."
             } else {
                 "Checking for stories..."
@@ -432,7 +422,7 @@ fn file_lines(filename: impl AsRef<Path>) -> Vec<String> {
         .collect()
 }
 
-async fn fetch_feed_stories(feed: String) -> Vec<Story> {
+async fn fetch_feed_stories(feed: String, read_stories: Vec<String>) -> Vec<Story> {
     let today = chrono::Local::now();
     let client = Client::new();
     let mut stories = Vec::new();
@@ -447,6 +437,12 @@ async fn fetch_feed_stories(feed: String) -> Vec<Story> {
     {
         for story in channel.entries {
             if let Some(pub_date) = story.updated {
+                if let Some(url) = story.link.clone() {
+                    if read_stories.contains(&url) {
+                        continue;
+                    }
+                }
+
                 if pub_date.date_naive() != today.date_naive() {
                     break;
                 }
@@ -462,21 +458,11 @@ async fn fetch_feed_stories(feed: String) -> Vec<Story> {
                 }
 
                 stories.push(Story {
-                    author: if story.author.is_some() {
-                        Some(story.author.unwrap().to_string())
-                    } else {
-                        None
-                    },
-                    title: if let Some(title) = story.title {
-                        Some(title)
-                    } else {
-                        None
-                    },
+                    author: story.author.map(|f| f.to_string()),
+                    title: story.title,
                     url: story.link.unwrap_or(String::from("")),
-                    contact: if let Some(ad) = story.author_detail.clone()
-                        && let Some(email) = ad.email
-                    {
-                        Some(email.to_string())
+                    contact: if let Some(ad) = story.author_detail.clone() {
+                        ad.email.map(|f| f.to_string())
                     } else {
                         None
                     },
@@ -489,15 +475,12 @@ async fn fetch_feed_stories(feed: String) -> Vec<Story> {
 }
 
 fn add_story_read(story: Story) {
-    if let Some(home) = home_dir() {
-        let mut read_file_path = home.clone();
-        read_file_path.push(".config/tinyfeeds/read.txt");
-
+    if let Some(config) = get_config_file_path("read.txt") {
         let mut file = OpenOptions::new()
             .write(true)
             .append(true)
             .create(true)
-            .open(read_file_path)
+            .open(config)
             .unwrap();
 
         if let Err(e) = writeln!(file, "{}", story.url) {
@@ -506,16 +489,10 @@ fn add_story_read(story: Story) {
     }
 }
 
-fn get_read_stories() {
-    if let Some(home) = home_dir() {
-        let mut read_file_path = home.clone();
-        read_file_path.push(".config/tinyfeeds/read.txt");
-
-        if let Ok(file) = OpenOptions::new()
-            .write(false)
-            .append(false)
-            .create(false)
-            .open(read_file_path)
-        {}
+fn get_config_file_path(filename: &str) -> Option<PathBuf> {
+    if let Some(mut home) = home_dir() {
+        home.push(format!(".config/tinyfeeds/{}", filename));
+        return Some(home);
     }
+    None
 }
