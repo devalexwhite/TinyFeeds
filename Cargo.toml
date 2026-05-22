@@ -1,7 +1,10 @@
 [package]
-name = "tinyfeeds"
+name = "TinyFeeds"
 version = "0.1.0"
 edition = "2024"
+description = "Optimized, opinionated and minimal RSS feed reader built with Rust and Iced."
+homepage = "https://thatalexguy.dev"
+license = "GPL-3.0-only"
 
 [dependencies]
 chrono = "0.4.44"
@@ -23,3 +26,12 @@ codegen-units = 1
 [package.metadata.appimage]
 icon = "icon.png"
 desktop_entry = "tinyfeeds.desktop"
+
+[package.metadata.deb]
+maintainer = "Alex White <hi@thatalexguy.dev>"
+copyright = "2026, Alex White <hi@thatalexguy.dev>"
+assets = [
+  ["target/release/TinyFeeds", "usr/bin/tinyfeeds", "755"],
+  ["tinyfeeds.desktop", "usr/share/applications/", "644"],
+  ["tinyfeeds.png", "usr/share/icons/hicolor/256x256/apps/", "644"]
+]

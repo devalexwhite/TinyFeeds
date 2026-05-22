@@ -3,6 +3,20 @@
 version = 4
 
 [[package]]
+name = "TinyFeeds"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "feedparser-rs",
+ "frostmark",
+ "iced",
+ "readabilityrs",
+ "reqwest",
+ "webbrowser",
+]
+
+[[package]]
 name = "ab_glyph"
 version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5192,20 +5206,6 @@ dependencies = [
  "libloading",
  "pkg-config",
  "tracing",
-]
-
-[[package]]
-name = "tinyfeeds"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "feedparser-rs",
- "frostmark",
- "iced",
- "readabilityrs",
- "reqwest",
- "webbrowser",
 ]
 
 [[package]]
