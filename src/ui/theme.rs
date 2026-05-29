@@ -71,6 +71,10 @@ pub fn load_custom_css() {
             padding: 8px 12px;
             margin: 2px 0;
             border-radius: 6px;
+            font-weight: normal;
+        }
+        .menu-item-btn label {
+            font-weight: normal;
         }
         .sepia, 
         .sepia window, 

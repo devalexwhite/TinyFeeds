@@ -212,6 +212,7 @@ pub fn build_ui(app: &adw::Application, state: Rc<RefCell<AppState>>) {
         .css_classes(vec!["pill".to_string(), "suggested-action".to_string()])
         .build();
     let empty_box = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    empty_box.set_halign(gtk::Align::Center);
     empty_box.append(&empty_btn);
     empty_status.set_child(Some(&empty_box));
     stack.add_named(&empty_status, Some("empty"));
@@ -303,6 +304,7 @@ pub fn build_ui(app: &adw::Application, state: Rc<RefCell<AppState>>) {
         .css_classes(vec!["pill".to_string()])
         .build();
     let done_box = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    done_box.set_halign(gtk::Align::Center);
     done_box.append(&close_btn);
     done_status.set_child(Some(&done_box));
     stack.add_named(&done_status, Some("done"));
