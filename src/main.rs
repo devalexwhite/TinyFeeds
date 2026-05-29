@@ -131,6 +131,7 @@ impl App {
                         url: String::from("https://thatalexguy.dev"),
                         html: String::from(r"
                             <b>This is a sample story</b><h1>It tests the UI in dev mode</h1><h3>Enjoy being stuck in <i>sample land</i></h3>
+                            <details><summary>Test</summary>Hi there</details>
                             <p>ajskdkajdlkajd sajd ksajdlkaj dlkajsdkjsakdjaslkdja lkdjsalkd jaslkd jaklsjd kajsd lkjsa dlja d</p><p>kjsad lkjsadlsa jdalksd jlksajdak jdlkjsad lasjd
                             lksajdlsajd lkajsd lkjsa dlkjsa dkja lkdjasd </p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p>
                             <p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p><p>kasjd lkajsd akjdlksa jdlksajd lksajd jsadlkjsad jsadlksajd lkjsadlk jsadlkajsd ljas dlkjsad lkjsad lkjaslkdj sad</p>
@@ -229,7 +230,7 @@ impl App {
                     ) && let Some(article) = rd.parse()
                     {
                         if let Some(md) = article.markdown_content {
-                            self.mark_state = MarkState::with_markdown_only(md.as_str());
+                            self.mark_state = MarkState::with_html(md.as_str());
                         } else {
                             self.mark_state = MarkState::with_html(
                                 article.content.unwrap_or(String::from("")).as_str(),
