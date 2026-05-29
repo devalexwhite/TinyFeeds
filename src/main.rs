@@ -290,9 +290,13 @@ impl App {
     }
 
     fn download_images(&mut self) -> Task<Message> {
+        let base_url = self.stories.first().map(|s| s.url.clone());
         Task::batch(self.mark_state.find_image_links().into_iter().map(|url| {
             if self.images_in_progress.insert(url.clone()) {
-                Task::perform(image_loader::download_image(url), Message::ImageDownloaded)
+                Task::perform(
+                    image_loader::download_image(url, base_url.clone()),
+                    Message::ImageDownloaded,
+                )
             } else {
                 Task::none()
             }
