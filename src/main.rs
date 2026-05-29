@@ -14,7 +14,7 @@ use reqwest::Client;
 use std::{
     collections::{HashMap, HashSet},
     env::home_dir,
-    fs::{self, File, OpenOptions, create_dir_all},
+    fs::{File, OpenOptions, create_dir_all},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     time::Duration,
@@ -23,7 +23,6 @@ use std::{
 use crate::image_loader::Image;
 
 mod image_loader;
-mod ui;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -61,6 +60,7 @@ enum Message {
     CloseApp,
     ImageDownloaded(Result<Image, String>),
     UpdateState(UpdateMsg),
+    OpenFeedsFile,
 }
 
 struct App {
@@ -82,12 +82,24 @@ impl App {
         let args = Args::parse();
 
         let read_stories = if let Some(config) = get_config_file_path("read.txt") {
+            if !config.exists() {
+                if let Some(parent) = config.parent() {
+                    create_dir_all(parent).expect("Failed to create config directory.");
+                }
+                File::create(&config).expect("Failed to create read.txt");
+            }
             file_lines(config.as_path())
         } else {
             Vec::new()
         };
 
         let feeds = if let Some(config) = get_config_file_path("feeds.txt") {
+            if !config.exists() {
+                if let Some(parent) = config.parent() {
+                    create_dir_all(parent).expect("Failed to create config directory.");
+                }
+                File::create(&config).expect("Failed to create feeds.txt");
+            }
             file_lines(config.as_path())
         } else {
             let mut feeds_base_path = home_dir().unwrap_or_default();
@@ -230,7 +242,7 @@ impl App {
                     ) && let Some(article) = rd.parse()
                     {
                         if let Some(md) = article.markdown_content {
-                            self.mark_state = MarkState::with_html(md.as_str());
+                            self.mark_state = MarkState::with_markdown_only(md.as_str());
                         } else {
                             self.mark_state = MarkState::with_html(
                                 article.content.unwrap_or(String::from("")).as_str(),
@@ -246,6 +258,15 @@ impl App {
                 }
                 self.loading = false;
                 self.download_images()
+            }
+            Message::OpenFeedsFile => {
+                if let Some(path) = get_config_file_path("feeds.txt") {
+                    let editor = std::env::var("VISUAL")
+                        .or_else(|_| std::env::var("EDITOR"))
+                        .unwrap_or_else(|_| "xdg-open".to_string());
+                    let _ = std::process::Command::new(editor).arg(path).spawn();
+                }
+                Task::none()
             }
         }
     }
@@ -279,7 +300,20 @@ impl App {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        if self.loading || self.out_of_stories {
+        if self.feeds.is_empty() {
+            container(column![
+                text("Add feeds to get started.")
+                    .font(Font::MONOSPACE)
+                    .size(20),
+                container(button("Open feeds.txt").on_press(Message::OpenFeedsFile))
+                    .padding([20, 0])
+            ])
+            .width(Fill)
+            .align_x(Horizontal::Center)
+            .align_y(Vertical::Center)
+            .height(Fill)
+            .into()
+        } else if self.loading || self.out_of_stories {
             let message = if self.out_of_stories {
                 "That's it, check back later."
             } else {
