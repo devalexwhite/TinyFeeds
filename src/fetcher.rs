@@ -3,7 +3,6 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use reqwest::Client;
 use feedparser_rs::parse;
-use readabilityrs::{Readability, ReadabilityOptions};
 use crate::models::{Story, AppMessage, AppState};
 
 pub fn trigger_fetch(
@@ -17,11 +16,35 @@ pub fn trigger_fetch(
     tokio::spawn(async move {
         if dev_mode {
             tokio::time::sleep(Duration::from_secs(1)).await;
+            let dummy_html = r#"<p><strong>This is a sample story testing HTML features.</strong></p>
+<h1>It tests the UI in dev mode</h1>
+<h3>Enjoy being stuck in <em>sample land</em></h3>
+<p>Here is a collapsible detail tag:</p>
+<details>
+  <summary>Click to see secret content</summary>
+  <p>This content was hidden inside a details tag! Pretty cool, huh?</p>
+  <ul>
+    <li>Nested item 1</li>
+    <li>Nested item 2</li>
+  </ul>
+</details>
+<p>Here is an iframe embed (simulated):</p>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="YouTube video player" allowfullscreen></iframe>
+<p>And some blockquote:</p>
+<blockquote>
+  "This is a blockquote element that should stand out visually and look very premium."
+</blockquote>
+<p>Some code snippet:</p>
+<pre><code>fn main() {
+    println!("Hello, TinyFeeds!");
+}</code></pre>
+<p>And an external link: <a href="https://thatalexguy.dev">thatalexguy.dev</a></p>"#.to_string();
+
             let dummy = Story {
                 title: Some("Just a test article".to_string()),
                 author: Some("Alex White".to_string()),
                 url: "https://thatalexguy.dev".to_string(),
-                markdown: "**This is a sample story**\n# It tests the UI in dev mode\n### Enjoy being stuck in *sample land*\n\nTest\nHi there\najskdkajdlkajd sajd ksajdlkaj dlkajsdkjsakdjaslkdja lkdjsalkd jaslkd jaklsjd kajsd lkjsa dlja d".to_string(),
+                html: dummy_html,
                 contact: Some("hi@thatalexguy.dev".to_string()),
             };
             tx.send(AppMessage::StoriesFetched(vec![dummy])).ok();
@@ -95,32 +118,13 @@ pub async fn fetch_feed_stories(feed: String, read_stories: Vec<String>) -> Vec<
                 }
             }
 
-            let readability_options = ReadabilityOptions {
-                output_markdown: true,
-                ..Default::default()
-            };
-
-            let markdown = if let Ok(rd) = Readability::new(
-                content.as_str(),
-                Some(story_url.as_str()),
-                Some(readability_options),
-            ) {
-                if let Some(article) = rd.parse() {
-                    article.markdown_content.unwrap_or_else(|| content.clone())
-                } else {
-                    content.clone()
-                }
-            } else {
-                content.clone()
-            };
-
             let contact = find_story_email(&story, &channel.feed);
             stories.push(Story {
                 author: story.author.map(|f| f.to_string()),
                 title: story.title.clone(),
                 url: story_url,
                 contact,
-                markdown,
+                html: content,
             });
         }
     }

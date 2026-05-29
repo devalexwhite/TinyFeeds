@@ -8,7 +8,6 @@ mod args;
 mod config;
 mod models;
 mod fetcher;
-mod image_loader;
 mod ui;
 
 use args::Args;
@@ -39,8 +38,6 @@ fn main() {
             org_story_count: 0,
             dev_mode: args.dev_mode,
             loading: true,
-            image_widgets: std::collections::HashMap::new(),
-            images_in_progress: std::collections::HashSet::new(),
             theme,
         }));
         

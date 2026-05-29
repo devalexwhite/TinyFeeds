@@ -1,13 +1,22 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use libadwaita as adw;
-use gtk4::{self as gtk, gdk, gdk_pixbuf, glib};
+use gtk4::{self as gtk, gdk, glib};
 use libadwaita::prelude::*;
+use webkit6::prelude::*;
+use webkit6::{PolicyDecisionType, NavigationPolicyDecision, NavigationType};
 use crate::models::{AppState, AppMessage, Theme};
 use crate::config::{save_theme, add_story_read, open_feeds_file};
 use crate::fetcher::trigger_fetch;
 use crate::ui::theme::{load_custom_css, apply_theme, create_theme_button, update_theme_buttons_ui};
-use crate::ui::markdown::{clear_container, render_markdown};
+
+fn escape_html(s: &str) -> String {
+    s.replace('&', "&amp;")
+     .replace('<', "&lt;")
+     .replace('>', "&gt;")
+     .replace('"', "&quot;")
+     .replace('\'', "&apos;")
+}
 
 #[allow(dead_code)]
 #[derive(Clone)]
@@ -19,10 +28,7 @@ pub struct AppUi {
     pub empty_edit_btn: gtk::Button,
     pub loading_spinner: gtk::Spinner,
     pub progress_bar: gtk::ProgressBar,
-    pub title_label: gtk::Label,
-    pub author_label: gtk::Label,
-    pub body_box: gtk::Box,
-    pub scrolled_window: gtk::ScrolledWindow,
+    pub webview: webkit6::WebView,
     pub close_btn: gtk::Button,
     pub title_widget: adw::WindowTitle,
 }
@@ -98,9 +104,36 @@ pub fn build_ui(app: &adw::Application, state: Rc<RefCell<AppState>>) {
 
     let theme_buttons_rc = Rc::new(theme_buttons);
 
+    let webview = webkit6::WebView::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    webview.set_background_color(&gdk::RGBA::new(0.0, 0.0, 0.0, 0.0));
+    
+    // Intercept clicks to external links to open them in system browser instead
+    webview.connect_decide_policy(move |_, decision, decision_type| {
+        if decision_type == PolicyDecisionType::NavigationAction {
+            if let Some(nav_decision) = decision.downcast_ref::<NavigationPolicyDecision>() {
+                if let Some(action) = nav_decision.navigation_action() {
+                    if action.navigation_type() == NavigationType::LinkClicked {
+                        if let Some(request) = action.request() {
+                            if let Some(uri) = request.uri() {
+                                webbrowser::open(uri.as_str()).ok();
+                            }
+                        }
+                        nav_decision.ignore();
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    });
+
     let state_c = state.clone();
     let window_c = window.clone();
     let theme_buttons_c = theme_buttons_rc.clone();
+    let webview_c = webview.clone();
     system_btn.connect_clicked(move |_| {
         let mut s = state_c.borrow_mut();
         s.theme = Theme::System;
@@ -108,11 +141,20 @@ pub fn build_ui(app: &adw::Application, state: Rc<RefCell<AppState>>) {
         apply_theme(Theme::System, &window_c);
         save_theme(Theme::System);
         update_theme_buttons_ui(Theme::System, &theme_buttons_c);
+        
+        let theme_class = if adw::StyleManager::default().is_dark() {
+            "theme-dark"
+        } else {
+            "theme-light"
+        };
+        let script = format!("document.body.className = '{}';", theme_class);
+        webview_c.evaluate_javascript(&script, None, None, None::<&gtk::gio::Cancellable>, |_| {});
     });
 
     let state_c = state.clone();
     let window_c = window.clone();
     let theme_buttons_c = theme_buttons_rc.clone();
+    let webview_c = webview.clone();
     light_btn.connect_clicked(move |_| {
         let mut s = state_c.borrow_mut();
         s.theme = Theme::Light;
@@ -120,11 +162,15 @@ pub fn build_ui(app: &adw::Application, state: Rc<RefCell<AppState>>) {
         apply_theme(Theme::Light, &window_c);
         save_theme(Theme::Light);
         update_theme_buttons_ui(Theme::Light, &theme_buttons_c);
+        
+        let script = "document.body.className = 'theme-light';";
+        webview_c.evaluate_javascript(script, None, None, None::<&gtk::gio::Cancellable>, |_| {});
     });
 
     let state_c = state.clone();
     let window_c = window.clone();
     let theme_buttons_c = theme_buttons_rc.clone();
+    let webview_c = webview.clone();
     sepia_btn.connect_clicked(move |_| {
         let mut s = state_c.borrow_mut();
         s.theme = Theme::Sepia;
@@ -132,11 +178,15 @@ pub fn build_ui(app: &adw::Application, state: Rc<RefCell<AppState>>) {
         apply_theme(Theme::Sepia, &window_c);
         save_theme(Theme::Sepia);
         update_theme_buttons_ui(Theme::Sepia, &theme_buttons_c);
+        
+        let script = "document.body.className = 'theme-sepia';";
+        webview_c.evaluate_javascript(script, None, None, None::<&gtk::gio::Cancellable>, |_| {});
     });
 
     let state_c = state.clone();
     let window_c = window.clone();
     let theme_buttons_c = theme_buttons_rc.clone();
+    let webview_c = webview.clone();
     dark_btn.connect_clicked(move |_| {
         let mut s = state_c.borrow_mut();
         s.theme = Theme::Dark;
@@ -144,6 +194,22 @@ pub fn build_ui(app: &adw::Application, state: Rc<RefCell<AppState>>) {
         apply_theme(Theme::Dark, &window_c);
         save_theme(Theme::Dark);
         update_theme_buttons_ui(Theme::Dark, &theme_buttons_c);
+        
+        let script = "document.body.className = 'theme-dark';";
+        webview_c.evaluate_javascript(script, None, None, None::<&gtk::gio::Cancellable>, |_| {});
+    });
+
+    // Listen for system theme preference changes to update the webview dynamically
+    let state_c = state.clone();
+    let webview_c = webview.clone();
+    adw::StyleManager::default().connect_dark_notify(move |style_manager| {
+        let s = state_c.borrow();
+        if s.theme == Theme::System {
+            let is_dark = style_manager.is_dark();
+            let theme_class = if is_dark { "theme-dark" } else { "theme-light" };
+            let script = format!("document.body.className = '{}';", theme_class);
+            webview_c.evaluate_javascript(&script, None, None, None::<&gtk::gio::Cancellable>, |_| {});
+        }
     });
 
     let separator = gtk::Separator::new(gtk::Orientation::Horizontal);
@@ -237,49 +303,7 @@ pub fn build_ui(app: &adw::Application, state: Rc<RefCell<AppState>>) {
         .css_classes(vec!["osd".to_string()])
         .build();
     reader_box.append(&progress_bar);
-
-    let scrolled_window = gtk::ScrolledWindow::builder()
-        .hscrollbar_policy(gtk::PolicyType::Never)
-        .vscrollbar_policy(gtk::PolicyType::Automatic)
-        .vexpand(true)
-        .build();
-        
-    let clamp = adw::Clamp::builder()
-        .maximum_size(680)
-        .tightening_threshold(560)
-        .build();
-        
-    let content_box = gtk::Box::new(gtk::Orientation::Vertical, 16);
-    content_box.set_margin_top(24);
-    content_box.set_margin_bottom(24);
-    content_box.set_margin_start(16);
-    content_box.set_margin_end(16);
-
-    let title_label = gtk::Label::builder()
-        .wrap(true)
-        .halign(gtk::Align::Start)
-        .selectable(true)
-        .build();
-    title_label.add_css_class("title-1");
-    
-    let author_label = gtk::Label::builder()
-        .wrap(true)
-        .halign(gtk::Align::Start)
-        .selectable(true)
-        .build();
-    author_label.add_css_class("dim-label");
-    author_label.add_css_class("body");
-    author_label.set_margin_bottom(24);
-
-    let body_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
-
-    content_box.append(&title_label);
-    content_box.append(&author_label);
-    content_box.append(&body_box);
-    
-    clamp.set_child(Some(&content_box));
-    scrolled_window.set_child(Some(&clamp));
-    reader_box.append(&scrolled_window);
+    reader_box.append(&webview);
 
     let action_bar = gtk::ActionBar::new();
     let next_btn = gtk::Button::builder()
@@ -322,10 +346,7 @@ pub fn build_ui(app: &adw::Application, state: Rc<RefCell<AppState>>) {
         empty_edit_btn: empty_btn.clone(),
         loading_spinner,
         progress_bar,
-        title_label,
-        author_label,
-        body_box,
-        scrolled_window,
+        webview: webview.clone(),
         close_btn: close_btn.clone(),
         title_widget,
     };
@@ -353,12 +374,6 @@ pub fn build_ui(app: &adw::Application, state: Rc<RefCell<AppState>>) {
                     s.loading = false;
                     drop(s);
                     update_ui(&state_clone, &ui_clone, &tx_clone);
-                }
-                AppMessage::ImageDownloaded { url, bytes } => {
-                    handle_downloaded_image(&state_clone, url, bytes);
-                }
-                AppMessage::ImageDownloadFailed { url, error } => {
-                    handle_download_failed(&state_clone, url, error);
                 }
             }
         }
@@ -421,12 +436,9 @@ pub fn build_ui(app: &adw::Application, state: Rc<RefCell<AppState>>) {
 pub fn update_ui(
     app_state: &Rc<RefCell<AppState>>, 
     ui: &AppUi, 
-    tx: &tokio::sync::mpsc::UnboundedSender<AppMessage>
+    _tx: &tokio::sync::mpsc::UnboundedSender<AppMessage>
 ) {
-    let mut state = app_state.borrow_mut();
-    
-    state.image_widgets.clear();
-    state.images_in_progress.clear();
+    let state = app_state.borrow();
     
     let has_feeds = !state.feeds.is_empty();
     let is_loading = state.loading;
@@ -455,29 +467,183 @@ pub fn update_ui(
         
         let story = state.stories[0].clone();
         
-        ui.title_label.set_text(story.title.as_deref().unwrap_or("Untitled"));
-        
-        if let Some(ref author) = story.author {
-            ui.author_label.set_text(&format!("By {}", author));
-            ui.author_label.set_visible(true);
-        } else {
-            ui.author_label.set_visible(false);
-        }
-        
         ui.email_author_btn.set_visible(story.contact.is_some());
         ui.open_browser_btn.set_visible(!story.url.is_empty());
         
-        let vadjustment = ui.scrolled_window.vadjustment();
-        vadjustment.set_value(vadjustment.lower());
+        let theme_class = match state.theme {
+            Theme::Light => "theme-light",
+            Theme::Dark => "theme-dark",
+            Theme::Sepia => "theme-sepia",
+            Theme::System => {
+                if adw::StyleManager::default().is_dark() {
+                    "theme-dark"
+                } else {
+                    "theme-light"
+                }
+            }
+        };
+
+        let author_html = if let Some(ref author) = story.author {
+            format!("<div class=\"story-author\">By {}</div>", escape_html(author))
+        } else {
+            String::new()
+        };
+
+        let title_html = format!("<h1 class=\"story-title\">{}</h1>", escape_html(story.title.as_deref().unwrap_or("Untitled")));
+
+        let html_content = format!(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+:root {{
+  --bg-color: #ffffff;
+  --text-color: #242424;
+  --border-color: rgba(0, 0, 0, 0.1);
+  --details-bg: rgba(0, 0, 0, 0.02);
+  --link-color: #3584e4;
+  --blockquote-border-color: #3584e4;
+  --blockquote-text-color: #5e5e5e;
+  --code-bg: rgba(0, 0, 0, 0.05);
+}}
+html.theme-dark, body.theme-dark {{
+  --bg-color: #1e1e1e;
+  --text-color: #e0e0e0;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --details-bg: rgba(255, 255, 255, 0.03);
+  --link-color: #78aeed;
+  --blockquote-border-color: #3584e4;
+  --blockquote-text-color: #a0a0a0;
+  --code-bg: rgba(255, 255, 255, 0.08);
+}}
+html.theme-sepia, body.theme-sepia {{
+  --bg-color: #f4ecd8;
+  --text-color: #433422;
+  --border-color: rgba(67, 52, 34, 0.15);
+  --details-bg: rgba(140, 98, 57, 0.04);
+  --link-color: #8c6239;
+  --blockquote-border-color: #8c6239;
+  --blockquote-text-color: #6e5e4f;
+  --code-bg: rgba(140, 98, 57, 0.08);
+}}
+html.theme-light, body.theme-light {{
+  --bg-color: #ffffff;
+  --text-color: #242424;
+  --border-color: rgba(0, 0, 0, 0.1);
+  --details-bg: rgba(0, 0, 0, 0.02);
+  --link-color: #3584e4;
+  --blockquote-border-color: #3584e4;
+  --blockquote-text-color: #5e5e5e;
+  --code-bg: rgba(0, 0, 0, 0.05);
+}}
+body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    font-size: 16px;
+    margin: 0;
+    padding: 0;
+    word-wrap: break-word;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}}
+.container {{
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 24px 16px;
+}}
+.story-title {{
+    font-size: 2.2em;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-top: 0;
+    margin-bottom: 8px;
+}}
+.story-author {{
+    font-size: 1em;
+    opacity: 0.7;
+    margin-bottom: 24px;
+}}
+details {{
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 16px;
+    background-color: var(--details-bg);
+}}
+summary {{
+    font-weight: bold;
+    cursor: pointer;
+    outline: none;
+    padding: 4px;
+}}
+details[open] {{
+    padding-bottom: 12px;
+}}
+details[open] summary {{
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 8px;
+}}
+iframe {{
+    max-width: 100%;
+    border: none;
+    border-radius: 6px;
+    display: block;
+    margin: 16px auto;
+}}
+a {{
+    color: var(--link-color);
+    text-decoration: none;
+}}
+a:hover {{
+    text-decoration: underline;
+}}
+blockquote {{
+    border-left: 4px solid var(--blockquote-border-color);
+    padding-left: 12px;
+    margin: 16px 0;
+    font-style: italic;
+    color: var(--blockquote-text-color);
+}}
+pre, code {{
+    font-family: monospace;
+    background-color: var(--code-bg);
+    border-radius: 4px;
+}}
+pre {{
+    padding: 12px;
+    overflow-x: auto;
+}}
+code {{
+    padding: 2px 4px;
+}}
+img {{
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    display: block;
+    margin: 16px auto;
+}}
+</style>
+</head>
+<body class="{}">
+<div class="container">
+  {}
+  {}
+  <div class="story-content">
+    {}
+  </div>
+</div>
+</body>
+</html>"#,
+            theme_class,
+            title_html,
+            author_html,
+            story.html
+        );
         
-        clear_container(&ui.body_box);
+        ui.webview.load_html(&html_content, Some(&story.url));
         
-        let markdown = story.markdown.clone();
-        
-        drop(state); 
-        render_markdown(&markdown, &ui.body_box, app_state, tx);
-        
-        let state = app_state.borrow();
         let progress = if state.org_story_count > 0 {
             1.0 - (state.stories.len() as f64 / state.org_story_count as f64)
         } else {
@@ -497,39 +663,5 @@ pub fn update_ui(
             format!("{} of {} stories left", remaining, total)
         };
         ui.title_widget.set_subtitle(&subtitle);
-    }
-}
-
-pub fn handle_downloaded_image(app_state: &Rc<RefCell<AppState>>, url: String, bytes: Vec<u8>) {
-    let state = app_state.borrow();
-    
-    let loader = gdk_pixbuf::PixbufLoader::new();
-    if loader.write(&bytes).is_ok() && loader.close().is_ok() {
-        if let Some(pixbuf) = loader.pixbuf() {
-            let texture = gdk::Texture::for_pixbuf(&pixbuf);
-            
-            if let Some(refs) = state.image_widgets.get(&url) {
-                for r in refs {
-                    r.picture.set_paintable(Some(&texture));
-                    r.stack.set_visible_child(&r.picture);
-                }
-            }
-        }
-    } else {
-        if let Some(refs) = state.image_widgets.get(&url) {
-            for r in refs {
-                r.stack.set_visible_child(&r.error_label);
-            }
-        }
-    }
-}
-
-pub fn handle_download_failed(app_state: &Rc<RefCell<AppState>>, url: String, error: String) {
-    eprintln!("Failed to download image {}: {}", url, error);
-    let state = app_state.borrow();
-    if let Some(refs) = state.image_widgets.get(&url) {
-        for r in refs {
-            r.stack.set_visible_child(&r.error_label);
-        }
     }
 }
