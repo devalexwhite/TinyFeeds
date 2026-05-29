@@ -1,19 +1,17 @@
 use std::sync::LazyLock;
-
 use reqwest::Client;
-
-// Just a quick and dirty setup for showcase
 
 #[derive(Debug, Clone)]
 pub struct Image {
     pub bytes: Vec<u8>,
+    #[allow(dead_code)]
     pub url: String,
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub is_svg: bool,
 }
 
 pub async fn download_image(url: String, base_url: Option<String>) -> Result<Image, String> {
-    static CLIENT: LazyLock<Client> = LazyLock::new(|| Client::new());
+    static CLIENT: LazyLock<Client> = LazyLock::new(Client::new);
 
     let resolved_url = if let Some(base_str) = base_url {
         if let Ok(base_url) = reqwest::Url::parse(&base_str) {
