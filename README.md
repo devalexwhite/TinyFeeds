@@ -4,7 +4,7 @@
 
 A tiny, highly opionated, minimal RSS feed reader.
 
-<img src="./screenshot.png" width="600" alt="Screenshot of TinyFeeds" />
+<img src="./images/tinyfeeds5.png" width="600" alt="Screenshot of TinyFeeds" />
 
 
 ## Features
