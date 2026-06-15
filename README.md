@@ -2,7 +2,7 @@
 
 # TinyFeeds
 
-A tiny, highly opionated, minimal RSS feed reader.
+Minimal, focused GTK 4 RSS/Atom feed reader built with Rust.
 
 <img src="./images/tinyfeeds5.png" width="600" alt="Screenshot of TinyFeeds" />
 
